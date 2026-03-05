@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Stock Terminal v2.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'JetBrains Mono', monospace; }
+        .glass { background: rgba(31, 41, 55, 0.7); backdrop-filter: blur(10px); }
+        .btn-buy { background: linear-gradient(135deg, #059669 0%, #10b981 100%); }
+        .btn-sell { background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); }
+        #chart_container { height: 300px; width: 100%; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+
+    <div class="max-w-7xl mx-auto p-6">
+        <header class="flex justify-between items-center mb-10 border-b border-gray-800 pb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-blue-500 tracking-tighter">GITHUB_EXCHANGE v2.0</h1>
+                <p class="text-xs text-gray-500 mt-1">STATUS: ONLINE | NETWORK: GITHUB_ACTIONS | UI: TRADINGVIEW_INSIDE</p>
+            </div>
+            <div class="text-right">
+                <p id="clock" class="text-xl font-bold"></p>
+                <p class="text-xs text-gray-500">REAL-TIME MARKET DATA</p>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            
+            <div class="lg:col-span-1 space-y-6">
+                <div class="glass p-6 rounded-2xl border border-gray-700 shadow-2xl">
+                    <h2 class="text-lg font-bold mb-6 flex items-center">
+                        <span class="w-2 h-2 bg-blue-500 rounded-full animate-pulse mr-2"></span>
+                        EXECUTE_ORDER
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-2">STOCK_SYMBOL</label>
+                            <div class="flex gap-2">
+                                <input id="sym" type="text" placeholder="e.g. NVDA" 
+                                    class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500 uppercase">
+                                <button onclick="getRealtimeQuote()" class="bg-gray-700 px-4 rounded-lg hover:bg-gray-600 transition">查詢</button>
+                            </div>
+                        </div>
+
+                        <div id="quote_card" class="hidden bg-gray-950 p-4 rounded-lg border border-gray-800">
+                            <div class="flex justify-between items-center">
+                                <span id="quote_sym" class="font-bold text-gray-400">---</span>
+                                <span id="quote_price" class="text-2xl font-bold text-green-400">$0.00</span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-2">QUANTITY</label>
+                            <input id="qty" type="number" value="1" min="1"
+                                class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500">
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4 pt-4">
+                            <button onclick="sendOrder('buy')" class="btn-buy p-4 rounded-xl font-bold hover:opacity-90 transition transform active:scale-95 shadow-lg shadow-green-900/20">BUY</button>
+                            <button onclick="sendOrder('sell')" class="btn-sell p-4 rounded-xl font-bold hover:opacity-90 transition transform active:scale-95 shadow-lg shadow-red-900/20">SELL</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-3 space-y-6">
+                <div class="glass p-6 rounded-2xl border border-gray-700 shadow-2xl">
+                    <h2 class="text-lg font-bold mb-4 flex items-center">
+                        <span class="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                        MARKET_CHART (NVDA_5MIN)
+                    </h2>
+                    <div id="chart_container">
+                        </div>
+                </div>
+
+                <div class="glass p-6 rounded-2xl border border-gray-700 shadow-2xl overflow-x-auto">
+                    <h2 class="text-lg font-bold mb-6 flex items-center">
+                        <span class="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
+                        LEADERBOARD_STATUS
+                    </h2>
+                    <table class="w-full text-left table-auto">
+                        <thead>
+                            <tr class="text-xs text-gray-500 uppercase border-b border-gray-800">
+                                <th class="py-3 px-2">Player</th>
+                                <th class="py-3 px-2">Cash_Available</th>
+                                <th class="py-3 px-2">Holdings</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboard-body" class="divide-y divide-gray-800">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 設定時鐘與 UI 初始化
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString('zh-TW', {hour12: false});
+        }, 1000);
+        document.addEventListener('DOMContentLoaded', updateUI);
+        
+        // --- 下單跳轉 (原本功能) ---
+        function sendOrder(type) {
+            const sym = document.getElementById('sym').value.trim().toUpperCase();
+            const qty = document.getElementById('qty').value;
+            if(!sym || qty <= 0) return alert("請輸入有效的代號與數量！");
+            const repo = window.location.pathname.split('/')[1];
+            const userName = window.location.hostname.split('.')[0];
+            window.open(`https://github.com/${userName}/${repo}/issues/new?title=${type}+${sym}+${qty}&body=ORDER_REQUEST_FROM_UI`, '_blank');
+        }
+
+        // --- 排行榜讀取 (原本功能) ---
+        async function updateUI() {
+            try {
+                const res = await fetch('stock_game_db.csv?t=' + Date.now());
+                const data = await res.text();
+                const rows = data.trim().split('\n').slice(1);
+                
+                let html = '';
+                rows.forEach(row => {
+                    const parts = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                    if(parts.length < 3) return;
+                    const portfolio = parts[2].replace(/"/g, '').replace(/{/g, '').replace(/}/g, '').replace(/'/g, '');
+                    html += `
+                        <tr class="hover:bg-gray-800/50 transition">
+                            <td class="py-4 px-2 font-bold text-blue-400">${parts[0]}</td>
+                            <td class="py-4 px-2 font-mono text-green-400">$${parseFloat(parts[1]).toLocaleString()}</td>
+                            <td class="py-4 px-2 text-xs text-gray-400">${portfolio || '無持股'}</td>
+                        </tr>`;
+                });
+                document.getElementById('leaderboard-body').innerHTML = html;
+            } catch (err) { /* 排行榜載入失敗無須處理 */ }
+        }
+
+        // ==========================================
+        // 🔥🔥🔥 2.0 新功能：即時報價與圖表 🔥🔥🔥
+        // ==========================================
+
+        const symInput = document.getElementById('sym');
+        let chart, areaSeries;
+
+        // 初始化圖表
+        function initChart() {
+            chart = LightweightCharts.createChart(document.getElementById('chart_container'), {
+                layout: {
+                    background: { type: 'solid', color: 'transparent' },
+                    textColor: '#d1d5db',
+                },
+                grid: {
+                    vertLines: { color: 'rgba(55, 65, 81, 0.4)' },
+                    horzLines: { color: 'rgba(55, 65, 81, 0.4)' },
+                },
+                rightPriceScale: { borderVisible: false },
+                timeScale: { borderVisible: false, timeVisible: true },
+            });
+            areaSeries = chart.addAreaSeries({
+                lineColor: '#3b82f6',
+                topColor: 'rgba(59, 130, 246, 0.4)',
+                bottomColor: 'rgba(59, 130, 246, 0.05)',
+                lineWidth: 2,
+            });
+            // 初始數據 (NVDA 範例)
+            areaSeries.setData([
+                { time: '2026-03-01', value: 920.1 },
+                { time: '2026-03-02', value: 935.5 },
+                { time: '2026-03-03', value: 918.8 },
+                { time: '2026-03-04', value: 945.2 },
+                { time: '2026-03-05', value: 960.0 }, // 假設今天
+            ]);
+            chart.timeScale().fitContent();
+        }
+        initChart();
+
+        // 當輸入框改變時，自動更新圖表標題
+        symInput.addEventListener('input', () => {
+            document.getElementById('quote_card').classList.add('hidden'); // 隱承之前的報價
+        });
+
+        // 查詢即時報價與圖表數據
+        async function getRealtimeQuote() {
+            const sym = symInput.value.trim().toUpperCase();
+            if(!sym) return;
+
+            // 1. 更新 UI 狀態
+            document.getElementById('quote_sym').innerText = `LOADING...`;
+            document.getElementById('quote_card').classList.remove('hidden');
+
+            // 2. 抓取真實數據 (利用 yfinance API 支援的代號)
+            // 註：這部分在純網頁端只能請求 API，這裡使用模擬數據，
+            // 若要真實數據需在 Python Action 計算好存成 JSON 給網頁讀取。
+            // 這裡模擬網路請求：
+            setTimeout(() => {
+                const mockPrice = (Math.random() * 200 + 100).toFixed(2);
+                document.getElementById('quote_sym').innerText = sym;
+                document.getElementById('quote_price').innerText = `$${mockPrice}`;
+                
+                // 3. 更新圖表為新的股票 (這裡模擬 NVDA 轉換為 TSLA 的價格波動)
+                const mockData = generateMockChartData(sym);
+                areaSeries.setData(mockData);
+                chart.timeScale().fitContent();
+            }, 800);
+        }
+
+        // (輔助函式) 生成模擬的歷史數據
+        function generateMockChartData(sym) {
+            const data = [];
+            let price = (Math.random() * 500 + 100);
+            const now = new Date();
+            for (let i = 60; i >= 0; i--) {
+                const date = new Date(now);
+                date.setDate(date.getDate() - i);
+                const volatility = (Math.random() - 0.5) * (price * 0.05); // 5% 波動
+                price += volatility;
+                data.push({
+                    time: date.toISOString().split('T')[0], // 格式: YYYY-MM-DD
+                    value: price.toFixed(2)
+                });
+            }
+            return data;
+        }
+
+    </script>
+</body>
+</html>
