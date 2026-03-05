@@ -1,26 +1,32 @@
 name: StockEngine
-on: [issues]
+on: [issues] # 當有新的 Issue 時觸發
+
 jobs:
   trade:
     runs-on: ubuntu-latest
-    permissions: { issues: write, contents: write }
+    permissions: 
+      issues: write
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Setup Python
         uses: actions/setup-python@v5
-        with: { python-version: '3.10' }
-      - name: Dependencies
-        run: pip install yfinance pandas
-      - name: Run
-        env: { ISSUE_TITLE: "${{ github.event.issue.title }}", USER_NAME: "${{ github.event.issue.user.login }}" }
+        with: 
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install yfinance pandas # 必須安裝這兩個套件
+      - name: Run Logic
+        env: 
+          ISSUE_TITLE: "${{ github.event.issue.title }}"
+          USER_NAME: "${{ github.event.issue.user.login }}"
         run: python trade_logic.py
-      - name: Commit
+      - name: Commit & Push
         run: |
           git config --local user.email "bot@github.com"
           git config --local user.name "StockBot"
           git add .
           git commit -m "Update DB" || exit 0
           git push
-      - name: Close
-        run: gh issue close ${{ github.event.issue.number }} --comment "交易成功！"
+      - name: Close Issue
+        run: gh issue close ${{ github.event.issue.number }} --comment "交易完成！"
         env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
